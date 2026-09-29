@@ -16,3 +16,5 @@ data/derived/*
 !data/derived/.gitkeep
 data/reports/*
 !data/reports/.gitkeep
+data/coverage_cache/*
+!data/coverage_cache/.gitkeep

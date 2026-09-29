@@ -1407,6 +1407,18 @@ Deliverables:
 * Policy dates
 * Source links
 
+### Local implementation status
+
+Place `current_lcd.zip`, `current_article.zip`, and `ncd.zip` in `data/raw/coverage/`. Each archive contains a nested CSV bundle; the importer reads those bundles directly without extracting or modifying the raw archives. Build code-level relationships with:
+
+```bash
+./.venv/bin/python -m src.coverage_ingest
+```
+
+This writes `coverage_policy_matches.parquet`, `coverage_icd10_relationships.parquet`, and `coverage_ncd_relationships.parquet` under `data/derived/`, filtered to observed procedure codes in the Milestone 2 statistics. It joins LCD/Article HCPCS rows to exact current policy ID/version, attaches Article ICD-10 covered/noncovered code-table rows, and follows positive NCD references from matched documents. Placeholder NCD ID `0` is ignored. Coverage archives and generated tables are excluded from Git.
+
+The app can also refresh the public CMS Coverage API summary indexes for NCDs, final LCDs, and Articles; it caches them under `data/coverage_cache/` and supports title/ID search with official source links. Code-table relationships come from the local exports, not the summary index. An Article ICD-10 noncovered entry is an Article-specific diagnosis relationship, not a determination that the procedure itself is never covered. An absent relationship is not proof of noncoverage.
+
 ---
 
 ## Milestone 4 — Provider Investigation
