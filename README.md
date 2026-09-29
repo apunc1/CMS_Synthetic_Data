@@ -1350,6 +1350,16 @@ Deliverables:
 * Standardized Parquet files
 * Data-quality report
 
+### Local implementation status
+
+The Milestone 1 pipeline is implemented in `src/pipeline.py` and runs with:
+
+```bash
+python -m src.pipeline --chunksize 50000
+```
+
+It validates the eight local beneficiary, inpatient, carrier, and outpatient sources; standardizes them in chunks; and writes Parquet files under `data/processed/`, `data/source_manifest.csv`, `data/data_dictionary.csv`, and `data/reports/data_quality_report.csv`. The manifest contains per-file CMS source URLs, SHA-256 hashes, download date `2026-09-28`, and release date `2023-05-30`; the dictionary links each field to its official CCW codebook. Raw data, Parquet outputs, and reports remain local and are excluded from Git. For a future run, provide verified dates with `--download-date YYYY-MM-DD --release-date YYYY-MM-DD`.
+
 ---
 
 ## Milestone 2 — Procedure Explorer
