@@ -1378,6 +1378,18 @@ Deliverables:
 * Place-of-service distribution
 * Utilization trend
 
+### Local implementation status
+
+The local explorer is built from observed HCPCS/CPT codes using:
+
+```bash
+./.venv/bin/python -m src.procedure_analytics
+```
+
+This writes `procedure_stats.parquet`, `diagnosis_procedure_stats.parquet`, `provider_procedure_stats.parquet`, `pos_procedure_stats.parquet`, and `procedure_trends.parquet` under `data/derived/`. The Streamlit explorer runs with `./.venv/bin/python -m streamlit run app.py` after Milestone 1 and these aggregates are built.
+
+Claims are counted distinctly by claim type and claim ID. Diagnoses are multi-valued, so diagnosis percentages may sum above 100%. Provider rate means observed claims per beneficiary for that provider and code, not a population utilization rate. Allowed amounts and place of service are Carrier-only because those fields are not equivalent or consistently available in the institutional claims files. Codes are observed codes only; an HCPCS description reference has not been added yet.
+
 ---
 
 ## Milestone 3 — Coverage Intelligence
