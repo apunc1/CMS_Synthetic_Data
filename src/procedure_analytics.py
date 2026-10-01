@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
 import duckdb
+import pandas as pd
 import pyarrow.parquet as pq
 
 from src.config import DERIVED_DATA_DIR, PROCESSED_DATA_DIR
@@ -191,6 +192,63 @@ def get_procedure_details(procedure_code: str, derived_dir: Path = DERIVED_DATA_
         return tables
     finally:
         connection.close()
+
+
+def get_provider_peer_comparison(
+    provider_id: str,
+    procedure_code: str,
+    derived_dir: Path = DERIVED_DATA_DIR,
+) -> dict:
+    """Compare a provider's observed claim rate for a procedure against peer providers."""
+    path = derived_dir / "provider_procedure_stats.parquet"
+    if not path.is_file():
+        raise FileNotFoundError("Missing provider procedure table: provider_procedure_stats.parquet")
+
+    frame = pd.read_parquet(path)
+    peer_rows = frame[frame["procedure_code"] == procedure_code].copy()
+    if peer_rows.empty:
+        return {
+            "provider_id": provider_id,
+            "procedure_code": procedure_code,
+            "provider_rate": None,
+            "peer_median": None,
+            "peer_p90": None,
+            "peer_p95": None,
+            "rate_ratio": None,
+            "percentile": None,
+            "peer_count": 0,
+        }
+
+    provider_row = peer_rows[peer_rows["provider_id"] == provider_id]
+    provider_rate = float(provider_row["procedure_rate"].iloc[0]) if not provider_row.empty else None
+
+    peer_rows = peer_rows[peer_rows["provider_id"] != provider_id].copy()
+    peer_rates = pd.to_numeric(peer_rows["procedure_rate"], errors="coerce").dropna()
+    peer_median = float(peer_rates.median()) if not peer_rates.empty else None
+    peer_p90 = float(peer_rates.quantile(0.90)) if not peer_rates.empty else None
+    peer_p95 = float(peer_rates.quantile(0.95)) if not peer_rates.empty else None
+
+    if provider_rate is not None and peer_median not in (None, 0):
+        rate_ratio = provider_rate / peer_median
+    else:
+        rate_ratio = None
+
+    if provider_rate is not None and not peer_rates.empty:
+        percentile = (peer_rates <= provider_rate).mean() * 100.0
+    else:
+        percentile = None
+
+    return {
+        "provider_id": provider_id,
+        "procedure_code": procedure_code,
+        "provider_rate": provider_rate,
+        "peer_median": peer_median,
+        "peer_p90": peer_p90,
+        "peer_p95": peer_p95,
+        "rate_ratio": rate_ratio,
+        "percentile": round(percentile, 2) if percentile is not None else None,
+        "peer_count": int(len(peer_rates)),
+    }
 
 
 def build_procedure_analytics(

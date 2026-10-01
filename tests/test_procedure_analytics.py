@@ -6,6 +6,7 @@ from src.procedure_analytics import (
     build_procedure_analytics,
     get_procedure_codes,
     get_procedure_details,
+    get_provider_peer_comparison,
 )
 
 
@@ -86,3 +87,30 @@ def test_build_procedure_analytics_uses_distinct_claims_and_source_scopes(
     assert codes.iloc[0]["procedure_code"] == "A123"
     assert details["summary"]["claim_count"] == 4
     assert len(details["diagnoses"]) == 2
+
+
+def test_get_provider_peer_comparison_calculates_rate_metrics(tmp_path: Path) -> None:
+    stats = pd.DataFrame(
+        {
+            "provider_id": ["NPI:1", "NPI:2", "NPI:3"],
+            "provider_id_type": ["NPI", "NPI", "NPI"],
+            "procedure_code": ["A123", "A123", "A123"],
+            "claim_count": [10, 2, 4],
+            "beneficiary_count": [5, 1, 2],
+            "total_allowed": [100.0, 20.0, 40.0],
+            "procedure_rate": [2.0, 2.0, 1.0],
+            "procedure_rate_basis": [
+                "Claims per beneficiary observed for this provider and procedure",
+                "Claims per beneficiary observed for this provider and procedure",
+                "Claims per beneficiary observed for this provider and procedure",
+            ],
+        }
+    )
+    stats.to_parquet(tmp_path / "provider_procedure_stats.parquet", index=False)
+
+    comparison = get_provider_peer_comparison("NPI:1", "A123", tmp_path)
+
+    assert comparison["provider_rate"] == 2.0
+    assert comparison["peer_median"] == 1.5
+    assert comparison["rate_ratio"] == 1.3333333333333333
+    assert comparison["percentile"] == 100.0

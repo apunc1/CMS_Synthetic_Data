@@ -1,6 +1,7 @@
 import math
 from datetime import datetime, timezone
 
+import pandas as pd
 import streamlit as st
 
 from src.config import DERIVED_DATA_DIR, RAW_DATA_DIR
@@ -10,7 +11,12 @@ from src.coverage_ingest import (
     load_local_coverage_details,
 )
 from src.data_loader import discover_data_files
-from src.procedure_analytics import get_procedure_codes, get_procedure_details
+from src.hcpcs_reference import get_long_description
+from src.procedure_analytics import (
+    get_procedure_codes,
+    get_procedure_details,
+    get_provider_peer_comparison,
+)
 
 
 st.set_page_config(page_title="CPT/HCPCS Procedure Intelligence", layout="wide")
@@ -53,9 +59,18 @@ selected_code = st.selectbox(
     procedure_codes["procedure_code"].tolist(),
     format_func=lambda code: f"{code} ({int(code_claim_counts[code]):,} claims)",
 )
-st.caption(
-    "Codes are observed in the current claims files; a CMS HCPCS description reference has not been added yet."
+coverage_outputs_ready = (
+    DERIVED_DATA_DIR / "coverage_policy_matches.parquet"
+).is_file()
+local_coverage = (
+    load_local_coverage_details(selected_code) if coverage_outputs_ready else None
 )
+selected_description = get_long_description(selected_code)
+if selected_description:
+    st.caption("HCPCS/CPT long description")
+    st.write(selected_description)
+else:
+    st.caption("Long description is not available for this code in the local reference files.")
 
 details = get_procedure_details(selected_code)
 summary = details["summary"]
@@ -142,6 +157,111 @@ with trend_tab:
         st.dataframe(trends, hide_index=True, use_container_width=True)
 
 st.divider()
+st.header("Provider Investigation")
+provider_stats_path = DERIVED_DATA_DIR / "provider_procedure_stats.parquet"
+if provider_stats_path.is_file():
+    provider_stats = pd.read_parquet(provider_stats_path)
+    provider_options = sorted(provider_stats["provider_id"].dropna().unique().tolist())
+    if not provider_options:
+        st.info("No provider IDs are available in the local aggregate tables.")
+    else:
+        selected_provider = st.selectbox("Provider ID", provider_options)
+        procedure_options = sorted(
+            provider_stats[provider_stats["provider_id"] == selected_provider]["procedure_code"]
+            .dropna()
+            .unique()
+            .tolist()
+        )
+        if not procedure_options:
+            st.info("No procedures were observed for the selected provider.")
+        else:
+            selected_provider_procedure = st.selectbox(
+                "Procedure code for peer comparison",
+                procedure_options,
+            )
+            comparison = get_provider_peer_comparison(selected_provider, selected_provider_procedure)
+            provider_matches = provider_stats[
+                (provider_stats["provider_id"] == selected_provider)
+                & (provider_stats["procedure_code"] == selected_provider_procedure)
+            ]
+            provider_row = provider_matches.iloc[0].to_dict() if not provider_matches.empty else {}
+            peer_rows = provider_stats[
+                provider_stats["procedure_code"] == selected_provider_procedure
+            ].copy()
+            peer_rows = peer_rows.sort_values("procedure_rate", ascending=False)
+
+            provider_rate_display = (
+                f"{comparison['provider_rate']:.2f}"
+                if comparison["provider_rate"] is not None
+                else "N/A"
+            )
+            peer_median_display = (
+                f"{comparison['peer_median']:.2f}"
+                if comparison["peer_median"] is not None
+                else "N/A"
+            )
+            rate_ratio_display = (
+                f"{comparison['rate_ratio']:.2f}x"
+                if comparison["rate_ratio"] is not None
+                else "N/A"
+            )
+            percentile_display = (
+                f"{comparison['percentile']:.2f}th"
+                if comparison["percentile"] is not None
+                else "N/A"
+            )
+
+            col_a, col_b, col_c, col_d = st.columns(4)
+            col_a.metric("Provider rate", provider_rate_display)
+            col_b.metric("Peer median", peer_median_display)
+            col_c.metric("Rate ratio", rate_ratio_display)
+            col_d.metric("Peer percentile", percentile_display)
+
+            st.caption(
+                "Peer comparison uses the observed claim rate for the selected procedure across all providers in the local aggregate tables."
+            )
+            st.dataframe(
+                peer_rows[
+                    ["provider_id", "procedure_code", "claim_count", "beneficiary_count", "procedure_rate"]
+                ].head(25),
+                hide_index=True,
+                use_container_width=True,
+            )
+            st.caption("Provider detail")
+            st.dataframe(
+                pd.DataFrame(
+                    {
+                        "Metric": [
+                            "Provider ID",
+                            "Procedure code",
+                            "Claim count",
+                            "Beneficiary count",
+                            "Procedure rate",
+                            "Peer median",
+                            "Peer 90th percentile",
+                            "Peer 95th percentile",
+                            "Peer percentile",
+                        ],
+                        "Value": [
+                            selected_provider,
+                            selected_provider_procedure,
+                            provider_row.get("claim_count"),
+                            provider_row.get("beneficiary_count"),
+                            provider_row.get("procedure_rate"),
+                            comparison["peer_median"],
+                            comparison["peer_p90"],
+                            comparison["peer_p95"],
+                            comparison["percentile"],
+                        ],
+                    }
+                ),
+                hide_index=True,
+                use_container_width=True,
+            )
+else:
+    st.info("Provider-level procedure statistics have not been built yet. Run python -m src.procedure_analytics first.")
+
+st.divider()
 st.header("Coverage Intelligence")
 st.caption("Browse CMS MCD policy summaries and their official source pages.")
 coverage_archive_names = ["current_lcd.zip", "current_article.zip", "ncd.zip"]
@@ -149,9 +269,7 @@ coverage_archives_ready = all(
     (RAW_DATA_DIR / "coverage" / filename).is_file()
     for filename in coverage_archive_names
 )
-coverage_outputs_ready = (DERIVED_DATA_DIR / "coverage_policy_matches.parquet").is_file()
 if coverage_outputs_ready:
-    local_coverage = load_local_coverage_details(selected_code)
     st.info(
         f"Showing code relationships from the local current MCD downloads for {selected_code}. "
         "An absent link in these files is not a coverage determination."
