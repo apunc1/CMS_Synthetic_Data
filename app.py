@@ -1,4 +1,5 @@
 import math
+import os
 from datetime import datetime, timezone
 
 import pandas as pd
@@ -13,6 +14,7 @@ from src.coverage_ingest import (
 from src.anomaly import build_provider_anomaly_table
 from src.data_loader import discover_data_files
 from src.hcpcs_reference import get_long_description
+from src.llm import generate_explanation
 from src.procedure_analytics import (
     get_procedure_codes,
     get_procedure_details,
@@ -294,6 +296,65 @@ try:
             )
 except FileNotFoundError:
     st.info("Provider-level anomaly scores are not available until the analytical tables are built.")
+
+st.divider()
+st.header("AI Explanation")
+st.caption(
+    "This layer uses the observed data and CMS coverage evidence to explain findings. "
+    "It does not determine coverage or wrongdoing."
+)
+
+provider_summary = "No provider-specific comparison was selected."
+provider_context = {}
+if provider_stats_path.is_file() and "selected_provider" in locals():
+    provider_stats = pd.read_parquet(provider_stats_path)
+    provider_matches = provider_stats[
+        (provider_stats["provider_id"] == selected_provider)
+        & (provider_stats["procedure_code"] == selected_code)
+    ]
+    if not provider_matches.empty:
+        provider_context = get_provider_peer_comparison(selected_provider, selected_code)
+        provider_summary = (
+            f"Provider rate: {provider_context.get('provider_rate')}; peer median: {provider_context.get('peer_median')}; "
+            f"rate ratio: {provider_context.get('rate_ratio')}; peer percentile: {provider_context.get('percentile')}"
+        )
+
+coverage_context = []
+if local_coverage is not None:
+    for _, row in local_coverage["policy_matches"].head(5).iterrows():
+        coverage_context.append(
+            {
+                "policy_type": row.get("policy_type"),
+                "display_id": row.get("display_id"),
+                "title": row.get("title"),
+                "source_url": row.get("source_url"),
+            }
+        )
+
+if st.button("Generate evidence-based explanation"):
+    explanation = generate_explanation(
+        {
+            "procedure_code": selected_code,
+            "description": selected_description,
+            "summary": summary,
+            "provider_comparison": provider_context,
+            "provider_summary": provider_summary,
+            "coverage_evidence": coverage_context,
+            "source_links": [
+                item["source_url"] for item in coverage_context if item.get("source_url")
+            ],
+            "anomaly_summary": "Peer percentile and anomaly score are evidence-only prioritization signals.",
+        }
+    )
+    st.write(explanation["explanation"])
+    st.caption("Limitations")
+    st.write(explanation["limitations"])
+    with st.expander("Evidence and prompt"):
+        st.code(explanation["prompt"], language="text")
+        if explanation["sources"]:
+            st.write("CMS source links:")
+            for source in explanation["sources"]:
+                st.write(source)
 
 st.divider()
 st.header("Coverage Intelligence")
