@@ -228,6 +228,10 @@ def test_build_local_coverage_relationships_joins_current_versions(
     assert counts["coverage_policy_matches.parquet"] == 2
     assert set(policies.policy_type) == {"Article", "LCD"}
     assert "Old Article Version" not in set(policies.title)
+    article = policies[policies.policy_type == "Article"].iloc[0]
+    assert article.short_description == "A123"
+    assert article.medium_description == ""
+    assert article.long_description == "Procedure A123"
     assert set(policies.contractor) == {"", "Test MAC"}
     assert set(policies.jurisdiction) == {"", "CA"}
     assert set(diagnoses.icd10_code) == {"I10", "F01"}

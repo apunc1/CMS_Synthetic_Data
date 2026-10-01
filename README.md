@@ -1388,7 +1388,7 @@ The local explorer is built from observed HCPCS/CPT codes using:
 
 This writes `procedure_stats.parquet`, `diagnosis_procedure_stats.parquet`, `provider_procedure_stats.parquet`, `pos_procedure_stats.parquet`, and `procedure_trends.parquet` under `data/derived/`. The Streamlit explorer runs with `./.venv/bin/python -m streamlit run app.py` after Milestone 1 and these aggregates are built.
 
-Claims are counted distinctly by claim type and claim ID. Diagnoses are multi-valued, so diagnosis percentages may sum above 100%. Provider rate means observed claims per beneficiary for that provider and code, not a population utilization rate. Allowed amounts and place of service are Carrier-only because those fields are not equivalent or consistently available in the institutional claims files. Codes are observed codes only; an HCPCS description reference has not been added yet.
+Claims are counted distinctly by claim type and claim ID. Diagnoses are multi-valued, so diagnosis percentages may sum above 100%. Provider rate means observed claims per beneficiary for that provider and code, not a population utilization rate. Allowed amounts and place of service are Carrier-only because those fields are not equivalent or consistently available in the institutional claims files. Codes are observed codes only; a complete HCPCS description reference has not been added yet.
 
 ---
 
@@ -1416,6 +1416,8 @@ Place `current_lcd.zip`, `current_article.zip`, and `ncd.zip` in `data/raw/cover
 ```
 
 This writes `coverage_policy_matches.parquet`, `coverage_icd10_relationships.parquet`, and `coverage_ncd_relationships.parquet` under `data/derived/`, filtered to observed procedure codes in the Milestone 2 statistics. It joins LCD/Article HCPCS rows to exact current policy ID/version, attaches Article ICD-10 covered/noncovered code-table rows, and follows positive NCD references from matched documents. Placeholder NCD ID `0` is ignored. Coverage archives and generated tables are excluded from Git.
+
+For codes present in the current LCD/Article code tables, the Coverage Intelligence panel displays `short_description` and `long_description` separately. The current CMS MCD bundles do not provide a medium-description field, so it remains blank. Codes without an LCD/Article relationship may still lack a description until a complete HCPCS reference is added.
 
 The app can also refresh the public CMS Coverage API summary indexes for NCDs, final LCDs, and Articles; it caches them under `data/coverage_cache/` and supports title/ID search with official source links. Code-table relationships come from the local exports, not the summary index. An Article ICD-10 noncovered entry is an Article-specific diagnosis relationship, not a determination that the procedure itself is never covered. An absent relationship is not proof of noncoverage.
 

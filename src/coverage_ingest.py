@@ -30,7 +30,9 @@ POLICY_OUTPUT_COLUMNS = [
     "retirement_date",
     "contractor",
     "jurisdiction",
-    "code_description",
+    "short_description",
+    "medium_description",
+    "long_description",
     "relationship_type",
     "source_url",
 ]
@@ -410,11 +412,9 @@ def _direct_policy_rows(
                 "retirement_date": retired,
                 "contractor": policy_context.get("contractor", ""),
                 "jurisdiction": policy_context.get("jurisdiction", ""),
-                "code_description": (
-                    code_row.get("long_description")
-                    or code_row.get("short_description")
-                    or ""
-                ),
+                "short_description": code_row.get("short_description", ""),
+                "medium_description": code_row.get("medium_description", ""),
+                "long_description": code_row.get("long_description", ""),
                 "relationship_type": f"HCPCS/CPT code listed in current {policy_type} code table",
                 "source_url": _source_url(policy_type, policy_id, version),
             }

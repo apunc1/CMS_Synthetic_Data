@@ -10,6 +10,7 @@ from src.coverage_ingest import (
     build_local_coverage_relationships,
     load_local_coverage_details,
 )
+from src.anomaly import build_provider_anomaly_table
 from src.data_loader import discover_data_files
 from src.hcpcs_reference import get_long_description
 from src.procedure_analytics import (
@@ -260,6 +261,39 @@ if provider_stats_path.is_file():
             )
 else:
     st.info("Provider-level procedure statistics have not been built yet. Run python -m src.procedure_analytics first.")
+
+st.divider()
+st.header("Anomaly Intelligence")
+try:
+    anomaly_table = build_provider_anomaly_table(DERIVED_DATA_DIR)
+    if anomaly_table.empty:
+        st.info("No provider-level anomaly scores are available yet.")
+    else:
+        flagged = anomaly_table[anomaly_table["anomaly_flag"] | (anomaly_table["peer_percentile"] >= 90)].copy()
+        st.caption(
+            "Anomaly flags are a prioritization signal only; they do not establish inappropriate care or billing."
+        )
+        if flagged.empty:
+            st.info("No strong utilization outliers were detected in the current local peer comparison.")
+        else:
+            st.dataframe(
+                flagged[
+                    [
+                        "provider_id",
+                        "procedure_code",
+                        "provider_rate",
+                        "peer_median",
+                        "provider_to_peer_ratio",
+                        "peer_percentile",
+                        "anomaly_score",
+                        "anomaly_flag",
+                    ]
+                ].head(25),
+                hide_index=True,
+                use_container_width=True,
+            )
+except FileNotFoundError:
+    st.info("Provider-level anomaly scores are not available until the analytical tables are built.")
 
 st.divider()
 st.header("Coverage Intelligence")
